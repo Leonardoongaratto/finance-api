@@ -1,0 +1,7 @@
+.git
+.github
+docs
+scripts
+*.db
+*.exe
+coverage.out

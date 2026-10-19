@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l cmd internal)
+          if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+      - name: Tests with coverage (>= 80%)
+        run: |
+          go test ./... -coverprofile=coverage.out
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print $3}')
+          echo "total coverage: ${total}%"
+          awk -v t="$total" 'BEGIN { exit (t >= 80 ? 0 : 1) }'
+      - name: Build
+        run: CGO_ENABLED=0 go build -o finance-api ./cmd/finance-api
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: finance-api
+      - uses: actions/checkout@v4
+        with:
+          repository: Leonardoongaratto/finance-web
+          path: finance-web
+      - name: Start the stack
+        working-directory: finance-api
+        run: docker compose up -d --build --wait --wait-timeout 180
+      - name: Smoke test
+        run: |
+          curl -fsS http://127.0.0.1:8080/health
+          curl -fsS -o /dev/null http://127.0.0.1:5173/
+          curl -fsS -o /dev/null http://127.0.0.1:5173/dividas
+          headers=$(curl -fsS -D - -o /dev/null -H "Origin: http://127.0.0.1:5173" http://127.0.0.1:8080/api/dashboard)
+          echo "$headers"
+          echo "$headers" | grep -i '^access-control-allow-origin: http://127.0.0.1:5173'
+          if curl -fsS -D - -o /dev/null -H "Origin: https://evil.example" http://127.0.0.1:8080/api/dashboard | grep -i '^access-control-allow-origin'; then exit 1; fi
+      - name: Logs on failure
+        if: failure()
+        working-directory: finance-api
+        run: docker compose logs
+      - name: Stop the stack
+        if: always()
+        working-directory: finance-api
+        run: docker compose down -v

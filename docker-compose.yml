@@ -1,0 +1,30 @@
+# Runs the API and the web app side by side. Expects the two repositories cloned next to each other:
+#   finance-api/   (this repository)
+#   finance-web/
+# The browser talks to the API directly, so both ports are published, but only on the host loopback.
+services:
+  api:
+    build: .
+    environment:
+      FINANCE_ALLOW_ANY_ADDR: "true"
+      FINANCE_CORS_ORIGINS: http://127.0.0.1:5173,http://localhost:5173
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - finance-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../finance-web
+      args:
+        VITE_API_URL: http://127.0.0.1:8080
+    ports:
+      - "127.0.0.1:5173:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  finance-data:

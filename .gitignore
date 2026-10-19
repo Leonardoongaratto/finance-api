@@ -1,0 +1,17 @@
+# Local databases hold personal financial data and must never be committed
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Build output
+/finance-api
+/finance-api.exe
+/coverage.out
+
+.env
+.env.*
+!.env.example
+
+# Screenshots may show real financial data
+docs/screenshots/
